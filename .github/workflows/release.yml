@@ -1,0 +1,92 @@
+name: release
+
+# Builds the app from the PRIVATE source repository and publishes the binaries
+# here, where downloads are public and GitHub-hosted runners are free.
+#
+# Needs one repository secret: SOURCE_TOKEN — a fine-grained personal access
+# token with read access to the Contents of ohmyzhs/flow-image-master.
+#
+# Trigger from the source repo:  scripts/release.sh v0.1.1
+# or by hand:  gh workflow run release.yml -R ohmyzhs/flow-image-master-releases -f ref=v0.1.1
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "소스 저장소의 태그 (예: v0.1.1)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            artifact: macos
+          - os: windows-latest
+            artifact: windows
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: 소스 체크아웃 (비공개 저장소)
+        uses: actions/checkout@v4
+        with:
+          repository: ohmyzhs/flow-image-master
+          ref: ${{ inputs.ref }}
+          token: ${{ secrets.SOURCE_TOKEN }}
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27"
+          cache: true
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Go 테스트
+        run: go test ./... -short
+
+      - name: 의존성 설치
+        run: npm ci
+
+      - name: 엔진 빌드
+        shell: bash
+        run: npm run engine
+
+      - name: 앱 빌드 (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          npx tauri build --bundles dmg
+          mkdir -p release
+          cp src-tauri/target/release/bundle/dmg/*.dmg release/
+
+      - name: 앱 빌드 (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          npx tauri build --bundles nsis
+          mkdir -p release
+          cp src-tauri/target/release/flowimagemaster.exe release/FlowImageMaster-windows-x64-portable.exe
+          cp src-tauri/target/release/bundle/nsis/*.exe release/
+
+      - name: 릴리스 업로드
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.ref }}
+          name: FlowImageMaster ${{ inputs.ref }}
+          files: release/*
+          generate_release_notes: false
+
+      - name: 아티팩트 업로드
+        uses: actions/upload-artifact@v4
+        with:
+          name: flowimagemaster-${{ matrix.artifact }}
+          path: release/*
+          if-no-files-found: error
