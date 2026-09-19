@@ -76,12 +76,28 @@ jobs:
           cp src-tauri/target/release/flowimagemaster.exe release/FlowImageMaster-windows-x64-portable.exe
           cp src-tauri/target/release/bundle/nsis/*.exe release/
 
+      # 릴리스 노트는 소스 저장소의 CHANGELOG.md 에서 "## <태그>" 절을 잘라 쓴다.
+      # 절이 없으면 빈 노트 대신 실패시켜서, 노트 없는 릴리스가 조용히 나가지 않게 한다.
+      - name: 릴리스 노트 추출
+        shell: bash
+        run: |
+          awk -v tag="${{ inputs.ref }}" '
+            /^## / { on = ($2 == tag) ; next }
+            on { print }
+          ' CHANGELOG.md | sed -e :a -e '/^\n*$/{$d;N;ba' -e '}' > release-notes.md
+          if [ ! -s release-notes.md ]; then
+            echo "CHANGELOG.md 에 '## ${{ inputs.ref }}' 절이 없습니다." >&2
+            exit 1
+          fi
+          cat release-notes.md
+
       - name: 릴리스 업로드
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.ref }}
           name: FlowImageMaster ${{ inputs.ref }}
           files: release/*
+          body_path: release-notes.md
           generate_release_notes: false
 
       - name: 아티팩트 업로드
