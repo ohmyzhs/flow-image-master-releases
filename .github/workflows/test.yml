@@ -1,0 +1,48 @@
+name: test
+
+# Runs the source repository's Go tests on real Windows and macOS runners
+# without building or publishing anything. Used before tagging a release when
+# a change has OS-specific code that a Mac cannot exercise (e.g. the Windows
+# auto-update helper, §30).
+#
+#   gh workflow run test.yml -R ohmyzhs/flow-image-master-releases -f ref=<branch or tag>
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "소스 저장소의 브랜치 또는 태그"
+        required: true
+        type: string
+      packages:
+        description: "go test 대상 (기본: 전체)"
+        required: false
+        default: "./..."
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: 소스 체크아웃 (비공개 저장소)
+        uses: actions/checkout@v4
+        with:
+          repository: ohmyzhs/flow-image-master
+          ref: ${{ inputs.ref }}
+          token: ${{ secrets.SOURCE_TOKEN }}
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27"
+          cache: true
+
+      - name: Go 테스트
+        shell: bash
+        run: go test -short -count=1 -v ${{ inputs.packages }}
