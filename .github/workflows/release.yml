@@ -56,9 +56,18 @@ jobs:
       - name: 의존성 설치
         run: npm ci
 
+      # 문제 보내기(§32)의 텔레그램 봇 토큰·채팅 id 는 저장소 시크릿에서 엔진에 주입한다.
+      # 없으면 빌드는 되지만 앱의 [문제 보내기]가 "설정 없음"이 되므로 경고를 남긴다.
       - name: 엔진 빌드
         shell: bash
-        run: npm run engine
+        env:
+          FIM_TELEGRAM_BOT_TOKEN: ${{ secrets.FIM_TELEGRAM_BOT_TOKEN }}
+          FIM_TELEGRAM_CHAT_ID: ${{ secrets.FIM_TELEGRAM_CHAT_ID }}
+        run: |
+          if [ -z "$FIM_TELEGRAM_BOT_TOKEN" ] || [ -z "$FIM_TELEGRAM_CHAT_ID" ]; then
+            echo "::warning::FIM_TELEGRAM_BOT_TOKEN / FIM_TELEGRAM_CHAT_ID 시크릿이 없어 [문제 보내기]가 꺼진 빌드입니다"
+          fi
+          npm run engine
 
       - name: 앱 빌드 (macOS)
         if: runner.os == 'macOS'
